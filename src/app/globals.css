@@ -1,0 +1,146 @@
+/* Dragonslayer palette — mirrors the game's theme (gold/verdant/ember/parchment). */
+:root {
+  --gold: #d8a657;
+  --verdant: #89b482;
+  --ember: #ea6962;
+  --torch: #e3a84e;
+  --steel: #7c6f64;
+  --parchment: #d4be98;
+  --banner: #a9b665;
+  --bg: #1d2021;
+  --panel: #282828;
+  --ink: #ebdbb2;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  line-height: 1.5;
+}
+
+.masthead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid var(--steel);
+}
+
+.brand {
+  color: var(--gold);
+  font-weight: 700;
+  text-decoration: none;
+  font-size: 1.1rem;
+}
+
+.masthead nav a {
+  color: var(--parchment);
+  text-decoration: none;
+  margin-left: 1.25rem;
+}
+
+.masthead nav a:hover {
+  color: var(--gold);
+}
+
+main {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+
+h1 {
+  color: var(--gold);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1rem;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--panel);
+}
+
+th {
+  color: var(--steel);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+}
+
+tbody tr:nth-child(1) td {
+  color: var(--gold);
+  font-weight: 700;
+}
+
+td.gold {
+  color: var(--gold);
+}
+
+.rank {
+  color: var(--steel);
+  width: 3rem;
+}
+
+a {
+  color: var(--banner);
+}
+
+.empty {
+  color: var(--parchment);
+  padding: 2rem 0;
+}
+
+.footer {
+  max-width: 880px;
+  margin: 2rem auto;
+  padding: 1rem 1.5rem;
+  color: var(--steel);
+  border-top: 1px solid var(--panel);
+  font-size: 0.85rem;
+}
+
+.badge {
+  font-size: 0.7rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 0.25rem;
+  border: 1px solid var(--steel);
+  color: var(--parchment);
+}
+
+.badge.pending {
+  border-color: var(--torch);
+  color: var(--torch);
+}
+
+.btn {
+  font-family: inherit;
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--steel);
+  border-radius: 0.25rem;
+  padding: 0.3rem 0.7rem;
+  cursor: pointer;
+}
+
+.btn.approve {
+  border-color: var(--verdant);
+  color: var(--verdant);
+}
+
+.btn.reject {
+  border-color: var(--ember);
+  color: var(--ember);
+}
