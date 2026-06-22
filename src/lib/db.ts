@@ -21,6 +21,24 @@ export interface PlayerRow {
   created_at: string;
 }
 
+export interface GuildRow {
+  id: string;
+  slug: string;
+  name: string;
+  is_private: boolean;
+  owner_id: string | null;
+  created_at: string;
+}
+
+export interface GuildInviteRow {
+  id: string;
+  guild_id: string;
+  token: string;
+  email: string | null;
+  expires_at: string | null;
+  used_by: string | null;
+}
+
 export interface DailyGoldRunRow {
   id: string;
   player_id: string;

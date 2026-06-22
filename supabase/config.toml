@@ -1,0 +1,99 @@
+# Local Supabase config for the Dragonslayer leaderboard.
+#
+# Reference: https://supabase.com/docs/guides/local-development/cli/config
+# Generated against Supabase CLI 2.107.0, then trimmed for a lean local stack.
+#
+# This file is consumed by `npx supabase start` / `db reset` (driven through the
+# ./scripts/dev-*.sh helpers, which point the CLI at Podman). The ports below are
+# the CLI defaults — change them only if they clash with something else locally.
+
+project_id = "ds-leaderboard"
+
+[api]
+enabled = true
+port = 54321
+# `public` + `graphql_public` are always exposed; this is the app's read surface.
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+health_timeout = "2m"
+# Match Supabase cloud's current default major version.
+major_version = 17
+
+[db.migrations]
+# Apply supabase/migrations/*.sql on `db reset`.
+enabled = true
+schema_paths = []
+
+[db.seed]
+# Load supabase/seed.sql after migrations on `db reset` — gives the boards and the
+# moderator queue something to render locally.
+enabled = true
+sql_paths = ["./seed.sql"]
+
+[realtime]
+enabled = true
+
+[studio]
+# Web UI at http://127.0.0.1:54323 — browse tables, run SQL, inspect Storage.
+enabled = true
+port = 54323
+api_url = "http://127.0.0.1"
+openai_api_key = "env(OPENAI_API_KEY)"
+
+# Captured outbound email (none expected in the MVP, but cheap to keep around).
+[inbucket]
+enabled = true
+port = 54324
+
+[storage]
+enabled = true
+# The MVP stores screenshots (kilobytes); 50MiB is a generous local cap that also
+# leaves room for the Phase-2 compressed-video experiments.
+file_size_limit = "50MiB"
+
+# The standing media bucket the app reads from. Public-read so boards can render
+# screenshots directly; uploads in production go through presigned URLs (see
+# HOSTING.md). Declaring it here means `supabase start`/`db reset` create it
+# automatically — no manual dashboard step for local dev.
+[storage.buckets.ds-media]
+public = true
+file_size_limit = "50MiB"
+allowed_mime_types = ["image/png", "image/jpeg", "image/webp", "video/mp4"]
+
+# S3-compatible Storage API — matches the presigned-URL upload flow used in prod.
+[storage.s3_protocol]
+enabled = true
+
+[storage.analytics]
+enabled = false
+
+[storage.vector]
+enabled = false
+
+[auth]
+enabled = true
+# The Next.js dev server. GitHub OAuth via Supabase Auth is a later phase; locally
+# we just need Auth running so the stack is shaped like production.
+site_url = "http://127.0.0.1:3000"
+additional_redirect_urls = ["http://127.0.0.1:3000", "http://localhost:3000"]
+jwt_expiry = 3600
+enable_signup = true
+enable_anonymous_sign_ins = false
+minimum_password_length = 6
+
+[auth.email]
+enable_signup = true
+enable_confirmations = false
+
+# Edge functions aren't used by the leaderboard — keep the stack lean.
+[edge_runtime]
+enabled = false
+
+# Log analytics pulls in extra containers we don't need locally.
+[analytics]
+enabled = false

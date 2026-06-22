@@ -11,7 +11,10 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "dev:up": "./scripts/dev-up.sh",
+    "dev:down": "./scripts/dev-down.sh",
+    "dev:reset": "./scripts/dev-reset.sh"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",

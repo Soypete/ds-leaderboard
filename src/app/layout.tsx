@@ -19,6 +19,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           <nav>
             <a href="/">Gold / Day</a>
             <a href="/trials">Trials</a>
+            <a href="/guilds">Guilds</a>
+            <a href="/login">Sign in</a>
           </nav>
         </header>
         <main>{children}</main>
