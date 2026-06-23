@@ -87,6 +87,38 @@ npm run dev                  # http://localhost:3000
 - Gold board: shows the **approved** seeded runs.
 - `/moderate`: shows the **pending** seeded runs (reads past RLS via the service key).
 
+## Sign in locally (fake GitHub session)
+
+GitHub OAuth needs a real OAuth app, which we don't wire up locally. To test the
+signed-in paths — guild ownership controls, private boards, moderator powers —
+without github.com, use the **dev login route**:
+
+```
+http://localhost:3000/api/dev/login?as=captainnobody1
+```
+
+It mints (or reuses) a Supabase Auth user whose `user_metadata.user_name` is the
+handle you pass — the exact shape the real GitHub provider produces — signs in to
+get a genuine session, and sets the same `sb-<ref>-auth-token` cookie the real
+OAuth callback writes. Every downstream check then runs for real
+(`currentUser` → `githubIdentityFromUser` → `currentPlayer` → guild roles).
+
+- Default handle is `captainnobody1` (the seeded **owner** of the `roundtable`
+  guild) — sign in as them, open `/guilds/roundtable`, and you'll see the full
+  owner control set (make mod / make owner / remove / abdicate).
+- Pass `?as=<handle>` to be anyone, e.g. `?as=sirlintsalot` (a **mod** of
+  roundtable — sees remove only) or `?as=dame-refactor` (a plain **member** —
+  sees leave only). Handy for checking the role gating from each side.
+- For a seeded handle the route **reuses that player's `github_id`**, so the
+  session resolves to the existing player row (and its guild ownership) rather
+  than forking a new one.
+
+**Safety:** the route is hard-gated — it returns `403` unless `NODE_ENV` is not
+`production` AND the Supabase URL points at `127.0.0.1`/`localhost`. It can never
+forge a session against a hosted project, so it's safe to keep in the tree.
+To sign out, clear the `sb-…-auth-token` cookie for `localhost` (or use a private
+window).
+
 ## Studio (browse / query the DB)
 
 Open the **Studio URL** from `dev-up` output — `http://127.0.0.1:54323`. Browse
