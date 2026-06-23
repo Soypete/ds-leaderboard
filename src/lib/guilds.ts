@@ -17,7 +17,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { GuildInviteRow, GuildRole, GuildRow, TrialRow, VerificationStatus } from './db';
 
 // Re-export so existing importers of these from guilds.ts keep working.
-export type { GuildRow, GuildInviteRow } from './db';
+export type { GuildRow, GuildInviteRow, GuildRole } from './db';
 
 // ── Row shapes ────────────────────────────────────────────────────────────────
 
@@ -278,6 +278,26 @@ export type GuildWriteResult<T> =
   | { ok: true; value: T }
   | { ok: false; status: number; reason: string };
 
+/**
+ * Most guilds one player may OWN at once — an anti-spam cap (cf. Advent of Code's
+ * private-leaderboard limit). Membership in other people's guilds is unbounded;
+ * only owned guilds count. Bump this single constant to loosen the cap.
+ */
+export const OWNED_GUILD_CAP = 5;
+
+/** How many guilds `ownerId` currently owns. Used to enforce OWNED_GUILD_CAP. */
+export async function countGuildsOwnedBy(
+  db: SupabaseClient,
+  ownerId: string,
+): Promise<number> {
+  const { count, error } = await db
+    .from('guilds')
+    .select('id', { count: 'exact', head: true })
+    .eq('owner_id', ownerId);
+  if (error) throw new Error(`count owned guilds: ${error.message}`);
+  return count ?? 0;
+}
+
 export interface CreateGuildInput {
   name: string;
   slug?: string; // defaults to a slug derived from the name
@@ -287,9 +307,9 @@ export interface CreateGuildInput {
 
 /**
  * Create a guild owned by `ownerId` and seed the owner's membership row.
- * Validates the slug (derived from the name when omitted). Uses the service
- * client (bypasses RLS); call only from a server route that has already
- * authenticated the owner.
+ * Validates the slug (derived from the name when omitted) and enforces
+ * OWNED_GUILD_CAP. Uses the service client (bypasses RLS); call only from a
+ * server route that has already authenticated the owner.
  */
 export async function createGuild(
   db: SupabaseClient,
@@ -301,6 +321,15 @@ export async function createGuild(
   const slug = sanitizeSlug(input.slug && input.slug.length > 0 ? input.slug : name);
   if (!isValidSlug(slug)) {
     return { ok: false, status: 400, reason: 'guild name yields no valid slug' };
+  }
+
+  const owned = await countGuildsOwnedBy(db, input.ownerId);
+  if (owned >= OWNED_GUILD_CAP) {
+    return {
+      ok: false,
+      status: 429,
+      reason: `you already own ${owned} guilds (limit ${OWNED_GUILD_CAP}) — transfer or disband one first`,
+    };
   }
 
   const { data, error } = await db
@@ -444,4 +473,255 @@ export async function listPlayerGuilds(
     if (g) out.push(g);
   }
   return out.sort((a, b) => b.created_at.localeCompare(a.created_at));
+}
+
+// ── Membership management (owner/mod powers, SERVER ONLY) ────────────────────
+
+/** Read one member's role, or null when they're not in the guild. */
+async function memberRole(
+  db: SupabaseClient,
+  guildId: string,
+  playerId: string,
+): Promise<GuildRole | null> {
+  const { data, error } = await db
+    .from('guild_members')
+    .select('role')
+    .eq('guild_id', guildId)
+    .eq('player_id', playerId)
+    .maybeSingle<{ role: GuildRole }>();
+  if (error) throw new Error(`member role lookup: ${error.message}`);
+  return data?.role ?? null;
+}
+
+export interface RemoveMemberInput {
+  guildId: string;
+  actorId: string; // who is doing the removing
+  targetPlayerId: string; // who is being removed
+}
+
+/**
+ * Remove a member from a guild. The actor must be an owner or mod. Guards:
+ *   - the owner can never be removed (transfer or disband instead),
+ *   - mods may remove plain members only — not other mods or the owner,
+ *   - removing yourself is rejected here (use leaveGuild).
+ * Service client only — the route authenticates the actor first.
+ */
+export async function removeMember(
+  db: SupabaseClient,
+  input: RemoveMemberInput,
+): Promise<GuildWriteResult<{ removed: string }>> {
+  const { guildId, actorId, targetPlayerId } = input;
+  if (actorId === targetPlayerId) {
+    return { ok: false, status: 400, reason: 'use leave to remove yourself' };
+  }
+
+  const [actorRole, targetRole] = await Promise.all([
+    memberRole(db, guildId, actorId),
+    memberRole(db, guildId, targetPlayerId),
+  ]);
+
+  if (actorRole !== 'owner' && actorRole !== 'mod') {
+    return { ok: false, status: 403, reason: 'only an owner or mod can remove members' };
+  }
+  if (!targetRole) {
+    return { ok: false, status: 404, reason: 'that player is not in this guild' };
+  }
+  if (targetRole === 'owner') {
+    return { ok: false, status: 403, reason: 'the owner cannot be removed — transfer or disband first' };
+  }
+  if (actorRole === 'mod' && targetRole === 'mod') {
+    return { ok: false, status: 403, reason: 'a mod cannot remove another mod' };
+  }
+
+  const { error } = await db
+    .from('guild_members')
+    .delete()
+    .eq('guild_id', guildId)
+    .eq('player_id', targetPlayerId);
+  if (error) return { ok: false, status: 500, reason: `remove member: ${error.message}` };
+  return { ok: true, value: { removed: targetPlayerId } };
+}
+
+/**
+ * The member who should inherit ownership when the current owner leaves: the
+ * oldest mod, else the oldest non-owner member. Returns null when the owner is
+ * the only member left. Pure-ish (one query); ordering by joined_at is stable.
+ */
+async function heirApparent(
+  db: SupabaseClient,
+  guildId: string,
+  ownerId: string,
+): Promise<{ playerId: string; role: GuildRole } | null> {
+  const { data, error } = await db
+    .from('guild_members')
+    .select('player_id, role, joined_at')
+    .eq('guild_id', guildId)
+    .neq('player_id', ownerId)
+    .order('joined_at', { ascending: true })
+    .returns<{ player_id: string; role: GuildRole; joined_at: string }[]>();
+  if (error) throw new Error(`heir lookup: ${error.message}`);
+  const rows = data ?? [];
+  const mod = rows.find((r) => r.role === 'mod');
+  const chosen = mod ?? rows[0];
+  return chosen ? { playerId: chosen.player_id, role: chosen.role } : null;
+}
+
+export interface LeaveGuildInput {
+  guildId: string;
+  playerId: string;
+}
+
+/**
+ * Leave a guild. A plain member or mod just drops their row. When the OWNER
+ * leaves, ownership auto-passes to the heir apparent (oldest mod, else oldest
+ * member) before they go; if they're the last member, the guild is disbanded
+ * (deleted, which cascades its rows). Service client only.
+ */
+export async function leaveGuild(
+  db: SupabaseClient,
+  input: LeaveGuildInput,
+): Promise<GuildWriteResult<{ left: string; newOwnerId: string | null; disbanded: boolean }>> {
+  const { guildId, playerId } = input;
+  const role = await memberRole(db, guildId, playerId);
+  if (!role) return { ok: false, status: 404, reason: 'you are not in this guild' };
+
+  if (role === 'owner') {
+    const heir = await heirApparent(db, guildId, playerId);
+
+    if (!heir) {
+      // Last one out disbands the guild (cascade removes members/invites/runs).
+      const { error } = await db.from('guilds').delete().eq('id', guildId);
+      if (error) return { ok: false, status: 500, reason: `disband guild: ${error.message}` };
+      return { ok: true, value: { left: playerId, newOwnerId: null, disbanded: true } };
+    }
+
+    // Hand the crown to the heir, then drop the departing owner's row.
+    const { error: ownerErr } = await db
+      .from('guilds')
+      .update({ owner_id: heir.playerId })
+      .eq('id', guildId);
+    if (ownerErr) return { ok: false, status: 500, reason: `pass ownership: ${ownerErr.message}` };
+
+    if (heir.role !== 'owner') {
+      const { error: roleErr } = await db
+        .from('guild_members')
+        .update({ role: 'owner' })
+        .eq('guild_id', guildId)
+        .eq('player_id', heir.playerId);
+      if (roleErr) return { ok: false, status: 500, reason: `promote heir: ${roleErr.message}` };
+    }
+
+    const { error: delErr } = await db
+      .from('guild_members')
+      .delete()
+      .eq('guild_id', guildId)
+      .eq('player_id', playerId);
+    if (delErr) return { ok: false, status: 500, reason: `leave guild: ${delErr.message}` };
+    return { ok: true, value: { left: playerId, newOwnerId: heir.playerId, disbanded: false } };
+  }
+
+  const { error } = await db
+    .from('guild_members')
+    .delete()
+    .eq('guild_id', guildId)
+    .eq('player_id', playerId);
+  if (error) return { ok: false, status: 500, reason: `leave guild: ${error.message}` };
+  return { ok: true, value: { left: playerId, newOwnerId: null, disbanded: false } };
+}
+
+export interface SetMemberRoleInput {
+  guildId: string;
+  actorId: string;
+  targetPlayerId: string;
+  role: 'mod' | 'member'; // promote/demote between these; ownership uses transfer
+}
+
+/**
+ * Promote a member to mod or demote a mod to member. Owner-only. The owner's own
+ * row can't be changed here (use transferOwnership). Service client only.
+ */
+export async function setMemberRole(
+  db: SupabaseClient,
+  input: SetMemberRoleInput,
+): Promise<GuildWriteResult<{ playerId: string; role: GuildRole }>> {
+  const { guildId, actorId, targetPlayerId, role } = input;
+
+  const actorRole = await memberRole(db, guildId, actorId);
+  if (actorRole !== 'owner') {
+    return { ok: false, status: 403, reason: 'only the owner can change roles' };
+  }
+  if (targetPlayerId === actorId) {
+    return { ok: false, status: 400, reason: 'transfer ownership instead of re-roling yourself' };
+  }
+
+  const targetRole = await memberRole(db, guildId, targetPlayerId);
+  if (!targetRole) return { ok: false, status: 404, reason: 'that player is not in this guild' };
+  if (targetRole === 'owner') {
+    return { ok: false, status: 400, reason: 'cannot re-role the owner' };
+  }
+
+  const { error } = await db
+    .from('guild_members')
+    .update({ role })
+    .eq('guild_id', guildId)
+    .eq('player_id', targetPlayerId);
+  if (error) return { ok: false, status: 500, reason: `set role: ${error.message}` };
+  return { ok: true, value: { playerId: targetPlayerId, role } };
+}
+
+export interface TransferOwnershipInput {
+  guildId: string;
+  actorId: string; // must be the current owner
+  newOwnerId: string; // must already be a member
+}
+
+/**
+ * Hand a guild to another member. Owner-only; the new owner must already belong
+ * to the guild. Flips guilds.owner_id, makes the new owner's row 'owner', and
+ * demotes the old owner to 'mod' (they stay in the guild). No SQL transaction is
+ * available over the JS client, so steps are ordered owner_id → new role → old
+ * role and any failure returns a 500 with the guild possibly mid-flip; callers
+ * should treat a 500 as "retry the transfer". Service client only.
+ */
+export async function transferOwnership(
+  db: SupabaseClient,
+  input: TransferOwnershipInput,
+): Promise<GuildWriteResult<{ ownerId: string }>> {
+  const { guildId, actorId, newOwnerId } = input;
+  if (actorId === newOwnerId) {
+    return { ok: false, status: 400, reason: 'you already own this guild' };
+  }
+
+  const [actorRole, newRole] = await Promise.all([
+    memberRole(db, guildId, actorId),
+    memberRole(db, guildId, newOwnerId),
+  ]);
+  if (actorRole !== 'owner') {
+    return { ok: false, status: 403, reason: 'only the owner can transfer ownership' };
+  }
+  if (!newRole) {
+    return { ok: false, status: 404, reason: 'the new owner must already be a guild member' };
+  }
+
+  const { error: ownerErr } = await db
+    .from('guilds')
+    .update({ owner_id: newOwnerId })
+    .eq('id', guildId);
+  if (ownerErr) return { ok: false, status: 500, reason: `transfer ownership: ${ownerErr.message}` };
+
+  const { error: newRoleErr } = await db
+    .from('guild_members')
+    .update({ role: 'owner' })
+    .eq('guild_id', guildId)
+    .eq('player_id', newOwnerId);
+  if (newRoleErr) return { ok: false, status: 500, reason: `crown new owner: ${newRoleErr.message}` };
+
+  const { error: oldRoleErr } = await db
+    .from('guild_members')
+    .update({ role: 'mod' })
+    .eq('guild_id', guildId)
+    .eq('player_id', actorId);
+  if (oldRoleErr) return { ok: false, status: 500, reason: `demote old owner: ${oldRoleErr.message}` };
+
+  return { ok: true, value: { ownerId: newOwnerId } };
 }

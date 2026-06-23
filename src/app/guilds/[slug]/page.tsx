@@ -10,9 +10,11 @@ import {
   listGuildMembers,
   type GuildGoldRow,
   type GuildMemberRow,
+  type GuildRole,
   type GuildRow,
   type GuildTrialRow,
 } from '@/lib/guilds';
+import { RosterControls } from './RosterControls';
 
 // Reads the auth cookie to gate private boards to members — must be dynamic.
 export const dynamic = 'force-dynamic';
@@ -23,12 +25,22 @@ interface GuildData {
   gold: GuildGoldRow[];
   trials: GuildTrialRow[];
   isMember: boolean;
+  viewerId: string | null;
+  viewerRole: GuildRole | null;
   error: string | null;
   notConfigured: boolean;
 }
 
 async function loadGuild(slug: string): Promise<GuildData> {
-  const empty = { guild: null, members: [], gold: [], trials: [], isMember: false };
+  const empty = {
+    guild: null,
+    members: [] as GuildMemberRow[],
+    gold: [] as GuildGoldRow[],
+    trials: [] as GuildTrialRow[],
+    isMember: false,
+    viewerId: null,
+    viewerRole: null as GuildRole | null,
+  };
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
     return { ...empty, error: null, notConfigured: true };
   }
@@ -57,13 +69,24 @@ async function loadGuild(slug: string): Promise<GuildData> {
       guild = guild ?? (await getGuildBySlug(svc, slug));
       if (guild) {
         const members = await listGuildMembers(svc, guild.id);
-        isMember = members.some((m) => m.playerId === player.id);
+        const self = members.find((m) => m.playerId === player.id);
+        isMember = self != null;
         if (isMember) {
           const [gold, trials] = await Promise.all([
             guildGoldBoard(svc, guild.id),
             guildTrialBoard(svc, guild.id),
           ]);
-          return { guild, members, gold, trials, isMember, error: null, notConfigured: false };
+          return {
+            guild,
+            members,
+            gold,
+            trials,
+            isMember,
+            viewerId: player.id,
+            viewerRole: self?.role ?? null,
+            error: null,
+            notConfigured: false,
+          };
         }
       }
     }
@@ -79,20 +102,22 @@ async function loadGuild(slug: string): Promise<GuildData> {
         guildGoldBoard(anon, guild.id),
         guildTrialBoard(anon, guild.id),
       ]);
-      return { guild, members, gold, trials, isMember, error: null, notConfigured: false };
+      return {
+        guild,
+        members,
+        gold,
+        trials,
+        isMember,
+        viewerId: player?.id ?? null,
+        viewerRole: null,
+        error: null,
+        notConfigured: false,
+      };
     }
 
-    return { guild, members: [], gold: [], trials: [], isMember, error: null, notConfigured: false };
+    return { ...empty, guild, isMember, error: null, notConfigured: false };
   } catch (err) {
-    return {
-      guild: null,
-      members: [],
-      gold: [],
-      trials: [],
-      isMember: false,
-      error: (err as Error).message,
-      notConfigured: false,
-    };
+    return { ...empty, error: (err as Error).message, notConfigured: false };
   }
 }
 
@@ -110,7 +135,8 @@ export default async function GuildBoardPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const { guild, members, gold, trials, isMember, error, notConfigured } = await loadGuild(slug);
+  const { guild, members, gold, trials, isMember, viewerId, viewerRole, error, notConfigured } =
+    await loadGuild(slug);
 
   return (
     <>
@@ -204,32 +230,17 @@ export default async function GuildBoardPage({
           </section>
 
           <section>
-            <h2 style={{ color: 'var(--banner)' }}>Roster</h2>
+            <p className="field-rule">Roster</p>
             {members.length === 0 ? (
               <p className="empty">No members on the rolls.</p>
             ) : (
-              <table>
-                <thead>
-                  <tr>
-                    <th>Knight</th>
-                    <th>Rank</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {members.map((m) => (
-                    <tr key={m.playerId}>
-                      <td>
-                        <a href={`https://github.com/${m.handle}`} target="_blank" rel="noreferrer">
-                          {m.handle}
-                        </a>
-                      </td>
-                      <td>
-                        <span className="badge">{m.role}</span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <RosterControls
+                guildId={guild.id}
+                slug={slug}
+                members={members}
+                viewerId={viewerId}
+                viewerRole={viewerRole}
+              />
             )}
           </section>
         </>

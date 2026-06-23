@@ -13,7 +13,12 @@ import {
   generateInviteToken,
   isValidInviteToken,
   isValidSlug,
+  leaveGuild,
+  OWNED_GUILD_CAP,
+  removeMember,
   sanitizeSlug,
+  setMemberRole,
+  transferOwnership,
 } from './guilds';
 
 // ── Slug ──────────────────────────────────────────────────────────────────────
@@ -204,6 +209,15 @@ describe('createGuild', () => {
     if (!res.ok) expect(res.status).toBe(400);
   });
 
+  // The cap query: db.from('guilds').select('id', {count, head}).eq(...) → {count}.
+  // Returns a `guilds`-table mock whose .select(...).eq(...) resolves to `count`.
+  const guildsTableWithCount = (count: number, insert: ReturnType<typeof vi.fn>) => ({
+    insert,
+    select: vi.fn().mockReturnValue({
+      eq: vi.fn().mockResolvedValue({ count, error: null }),
+    }),
+  });
+
   it('inserts the guild then seeds the owner membership', async () => {
     const guildRow = {
       id: 'g1',
@@ -218,7 +232,7 @@ describe('createGuild', () => {
     const guildSelect = vi.fn().mockReturnValue({ single });
     const guildInsert = vi.fn().mockReturnValue({ select: guildSelect });
     const from = vi.fn((table: string) =>
-      table === 'guilds' ? { insert: guildInsert } : { insert: memberInsert },
+      table === 'guilds' ? guildsTableWithCount(0, guildInsert) : { insert: memberInsert },
     );
     const db = { from } as never;
 
@@ -235,12 +249,23 @@ describe('createGuild', () => {
     const single = vi.fn().mockResolvedValue({ data: null, error: { code: '23505', message: 'dup' } });
     const guildSelect = vi.fn().mockReturnValue({ single });
     const guildInsert = vi.fn().mockReturnValue({ select: guildSelect });
-    const from = vi.fn().mockReturnValue({ insert: guildInsert });
+    const from = vi.fn(() => guildsTableWithCount(0, guildInsert));
     const db = { from } as never;
 
     const res = await createGuild(db, { name: 'Taken', ownerId: 'p1' });
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.status).toBe(409);
+  });
+
+  it('rejects with 429 when the owner is at the guild cap', async () => {
+    const guildInsert = vi.fn();
+    const from = vi.fn(() => guildsTableWithCount(OWNED_GUILD_CAP, guildInsert));
+    const db = { from } as never;
+
+    const res = await createGuild(db, { name: 'One Too Many', ownerId: 'p1' });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.status).toBe(429);
+    expect(guildInsert).not.toHaveBeenCalled(); // never reaches the insert
   });
 });
 
@@ -306,5 +331,192 @@ describe('acceptInvite', () => {
     const res = await acceptInvite(db, token, 'p1');
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.status).toBe(409);
+  });
+});
+
+// ── Membership management ─────────────────────────────────────────────────────
+
+/**
+ * A guild_members mock driven by a `roles` map (playerId → role). Supports the
+ * read chain memberRole uses (.select('role').eq().eq().maybeSingle()), the
+ * heir scan (.select(...).eq().neq().order().returns()), plus delete/update —
+ * all resolving ok unless an injected error says otherwise. `guilds` table
+ * update (owner_id) resolves ok. Records calls on the returned spies.
+ */
+function memberDb(opts: {
+  roles: Record<string, 'owner' | 'mod' | 'member'>;
+  joinOrder?: string[]; // playerIds oldest→newest for the heir scan
+}) {
+  const memberUpdate = vi.fn().mockReturnValue({
+    eq: vi.fn().mockReturnValue({ eq: vi.fn().mockResolvedValue({ error: null }) }),
+  });
+  const memberDelete = vi.fn().mockReturnValue({
+    eq: vi.fn().mockReturnValue({ eq: vi.fn().mockResolvedValue({ error: null }) }),
+  });
+  const guildsUpdate = vi.fn().mockReturnValue({
+    eq: vi.fn().mockResolvedValue({ error: null }),
+  });
+  const guildsDelete = vi.fn().mockReturnValue({
+    eq: vi.fn().mockResolvedValue({ error: null }),
+  });
+
+  const order = vi.fn().mockReturnValue({
+    returns: vi.fn().mockResolvedValue({
+      data: (opts.joinOrder ?? []).map((id) => ({
+        player_id: id,
+        role: opts.roles[id],
+        joined_at: id,
+      })),
+      error: null,
+    }),
+  });
+
+  const memberSelect = vi.fn().mockImplementation(() => ({
+    // memberRole path: .eq(guild).eq(player).maybeSingle()
+    eq: vi.fn().mockImplementation(() => ({
+      eq: vi.fn().mockImplementation((_col: string, playerId: string) => ({
+        maybeSingle: vi
+          .fn()
+          .mockResolvedValue({ data: opts.roles[playerId] ? { role: opts.roles[playerId] } : null, error: null }),
+      })),
+      // heir path: .eq(guild).neq(owner).order(...)
+      neq: vi.fn().mockReturnValue({ order }),
+    })),
+  }));
+
+  const from = vi.fn((table: string) =>
+    table === 'guild_members'
+      ? { select: memberSelect, update: memberUpdate, delete: memberDelete }
+      : { update: guildsUpdate, delete: guildsDelete },
+  );
+  return { db: { from } as never, memberUpdate, memberDelete, guildsUpdate, guildsDelete };
+}
+
+describe('removeMember', () => {
+  it('rejects removing yourself (use leave)', async () => {
+    const { db } = memberDb({ roles: { p1: 'owner' } });
+    const res = await removeMember(db, { guildId: 'g1', actorId: 'p1', targetPlayerId: 'p1' });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.status).toBe(400);
+  });
+
+  it('forbids a plain member from removing anyone', async () => {
+    const { db } = memberDb({ roles: { actor: 'member', target: 'member' } });
+    const res = await removeMember(db, { guildId: 'g1', actorId: 'actor', targetPlayerId: 'target' });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.status).toBe(403);
+  });
+
+  it('never removes the owner', async () => {
+    const { db } = memberDb({ roles: { actor: 'mod', target: 'owner' } });
+    const res = await removeMember(db, { guildId: 'g1', actorId: 'actor', targetPlayerId: 'target' });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.status).toBe(403);
+  });
+
+  it('forbids a mod removing another mod', async () => {
+    const { db } = memberDb({ roles: { actor: 'mod', target: 'mod' } });
+    const res = await removeMember(db, { guildId: 'g1', actorId: 'actor', targetPlayerId: 'target' });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.status).toBe(403);
+  });
+
+  it('lets an owner remove a member', async () => {
+    const { db, memberDelete } = memberDb({ roles: { actor: 'owner', target: 'member' } });
+    const res = await removeMember(db, { guildId: 'g1', actorId: 'actor', targetPlayerId: 'target' });
+    expect(res.ok).toBe(true);
+    expect(memberDelete).toHaveBeenCalled();
+  });
+});
+
+describe('leaveGuild', () => {
+  it('lets a plain member leave', async () => {
+    const { db, memberDelete } = memberDb({ roles: { p1: 'member' } });
+    const res = await leaveGuild(db, { guildId: 'g1', playerId: 'p1' });
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.value.disbanded).toBe(false);
+    expect(memberDelete).toHaveBeenCalled();
+  });
+
+  it('auto-promotes the oldest mod when the owner leaves', async () => {
+    const { db, guildsUpdate } = memberDb({
+      roles: { owner: 'owner', oldmod: 'mod', newbie: 'member' },
+      joinOrder: ['newbie', 'oldmod'], // newbie joined first, but mod wins
+    });
+    const res = await leaveGuild(db, { guildId: 'g1', playerId: 'owner' });
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.value.newOwnerId).toBe('oldmod');
+    expect(guildsUpdate).toHaveBeenCalledWith({ owner_id: 'oldmod' });
+  });
+
+  it('falls back to the oldest member when there is no mod', async () => {
+    const { db } = memberDb({
+      roles: { owner: 'owner', a: 'member', b: 'member' },
+      joinOrder: ['a', 'b'],
+    });
+    const res = await leaveGuild(db, { guildId: 'g1', playerId: 'owner' });
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.value.newOwnerId).toBe('a');
+  });
+
+  it('disbands the guild when the lone owner leaves', async () => {
+    const { db, guildsDelete } = memberDb({ roles: { owner: 'owner' }, joinOrder: [] });
+    const res = await leaveGuild(db, { guildId: 'g1', playerId: 'owner' });
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.value.disbanded).toBe(true);
+    expect(guildsDelete).toHaveBeenCalled();
+  });
+});
+
+describe('setMemberRole', () => {
+  it('only the owner may change roles', async () => {
+    const { db } = memberDb({ roles: { actor: 'mod', target: 'member' } });
+    const res = await setMemberRole(db, {
+      guildId: 'g1',
+      actorId: 'actor',
+      targetPlayerId: 'target',
+      role: 'mod',
+    });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.status).toBe(403);
+  });
+
+  it('promotes a member to mod', async () => {
+    const { db, memberUpdate } = memberDb({ roles: { actor: 'owner', target: 'member' } });
+    const res = await setMemberRole(db, {
+      guildId: 'g1',
+      actorId: 'actor',
+      targetPlayerId: 'target',
+      role: 'mod',
+    });
+    expect(res.ok).toBe(true);
+    expect(memberUpdate).toHaveBeenCalledWith({ role: 'mod' });
+  });
+});
+
+describe('transferOwnership', () => {
+  it('only the owner may transfer', async () => {
+    const { db } = memberDb({ roles: { actor: 'mod', heir: 'member' } });
+    const res = await transferOwnership(db, { guildId: 'g1', actorId: 'actor', newOwnerId: 'heir' });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.status).toBe(403);
+  });
+
+  it('the new owner must already be a member', async () => {
+    const { db } = memberDb({ roles: { actor: 'owner' } });
+    const res = await transferOwnership(db, { guildId: 'g1', actorId: 'actor', newOwnerId: 'stranger' });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.status).toBe(404);
+  });
+
+  it('flips owner_id, crowns the heir, and demotes the old owner', async () => {
+    const { db, guildsUpdate, memberUpdate } = memberDb({
+      roles: { actor: 'owner', heir: 'mod' },
+    });
+    const res = await transferOwnership(db, { guildId: 'g1', actorId: 'actor', newOwnerId: 'heir' });
+    expect(res.ok).toBe(true);
+    expect(guildsUpdate).toHaveBeenCalledWith({ owner_id: 'heir' });
+    expect(memberUpdate).toHaveBeenCalledWith({ role: 'owner' });
+    expect(memberUpdate).toHaveBeenCalledWith({ role: 'mod' });
   });
 });
