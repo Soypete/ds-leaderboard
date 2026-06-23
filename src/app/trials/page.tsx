@@ -36,11 +36,11 @@ export default async function TrialsIndexPage() {
 
   return (
     <>
-      <h1>Vim Trial Speedruns</h1>
-      <p className="empty" style={{ padding: '0.5rem 0' }}>
-        One board per trial — fastest blade first, ranked by time then keystrokes.
-        Pick a trial to see who cleared it cleanest. Approved runs only; each
-        backed by a video.
+      <p className="eyebrow">Vim trial speedruns</p>
+      <h1>One board per trial. Fastest blade first.</h1>
+      <p className="lede">
+        Each trial is its own duel, ranked by time then keystrokes. Pick one to see
+        who cleared it cleanest. Approved runs only; each backed by a video.
       </p>
 
       {error ? (
@@ -49,22 +49,29 @@ export default async function TrialsIndexPage() {
         <p className="empty">No trials in the catalog yet. Sync the realm to raise the boards.</p>
       ) : (
         tiers.map(({ tier, trials }) => (
-          <section key={tier}>
-            <h2 style={{ color: 'var(--banner)' }}>Tier {tier}</h2>
+          <section className="tier" key={tier}>
+            <p className="tier-head">
+              <span className="tier-num">Tier {tier}</span>
+              <span className="tier-label">
+                {trials.length} {trials.length === 1 ? 'trial' : 'trials'}
+              </span>
+            </p>
             <table>
               <thead>
                 <tr>
                   <th>Trial</th>
-                  <th>Par</th>
+                  <th className="num">Par</th>
                 </tr>
               </thead>
               <tbody>
                 {trials.map((t) => (
                   <tr key={t.id}>
                     <td>
-                      <Link href={`/trials/${encodeURIComponent(t.id)}`}>{t.title}</Link>
+                      <Link className="trial-link" href={`/trials/${encodeURIComponent(t.id)}`}>
+                        {t.title}
+                      </Link>
                     </td>
-                    <td>{t.par} keys</td>
+                    <td className="num">{t.par} keys</td>
                   </tr>
                 ))}
               </tbody>

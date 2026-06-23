@@ -17,13 +17,15 @@ async function loadBoard(): Promise<{ rows: GoldBoardRow[]; error: string | null
 
 export default async function GoldBoardPage() {
   const { rows, error } = await loadBoard();
+  const [champion, ...field] = rows;
 
   return (
     <>
-      <h1>Gold Earned in a Day</h1>
-      <p className="empty" style={{ padding: '0.5rem 0' }}>
-        The biggest single-day hauls — coverage reclaimed, dragons slain, quests
-        cleared. Approved runs only; each backed by a screenshot.
+      <p className="eyebrow">Gold earned in a day</p>
+      <h1>The richest hauls in the realm</h1>
+      <p className="lede">
+        One day, all the gold a knight can mint — coverage reclaimed, dragons
+        slain, quests cleared. Approved runs only; each backed by a screenshot.
       </p>
 
       {error ? (
@@ -31,40 +33,88 @@ export default async function GoldBoardPage() {
       ) : rows.length === 0 ? (
         <p className="empty">No approved hauls yet. Be the first to ride.</p>
       ) : (
-        <table>
-          <thead>
-            <tr>
-              <th className="rank">#</th>
-              <th>Knight</th>
-              <th>Gold</th>
-              <th>Day</th>
-              <th>Proof</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r, i) => (
-              <tr key={r.runId}>
-                <td className="rank">{i + 1}</td>
-                <td>
-                  <a href={`https://github.com/${r.handle}`} target="_blank" rel="noreferrer">
-                    {r.handle}
-                  </a>
-                </td>
-                <td className="gold">⛁ {r.gold.toLocaleString()}</td>
-                <td>{r.day}</td>
-                <td>
-                  {r.receiptUrl ? (
-                    <a href={r.receiptUrl} target="_blank" rel="noreferrer">
+        <>
+          <section className="champion" aria-label="Current leader">
+            <span className="champion-rank" aria-hidden="true">
+              1
+            </span>
+            <div>
+              <a
+                className="champion-name"
+                href={`https://github.com/${champion.handle}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                {champion.handle}
+              </a>
+              <p className="champion-meta">
+                {champion.day}
+                {champion.receiptUrl ? (
+                  <>
+                    {' · '}
+                    <a href={champion.receiptUrl} target="_blank" rel="noreferrer">
                       receipt
                     </a>
-                  ) : (
-                    <span className="badge">—</span>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                  </>
+                ) : null}
+              </p>
+            </div>
+            <p className="champion-figure">
+              <span className="amount tnum">⛁ {champion.gold.toLocaleString()}</span>
+              <span className="unit">gold</span>
+            </p>
+          </section>
+
+          {field.length > 0 && (
+            <>
+              <p className="field-rule">The field</p>
+              <table>
+                <thead>
+                  <tr>
+                    <th className="rank">#</th>
+                    <th>Knight</th>
+                    <th className="num">Gold</th>
+                    <th>Day</th>
+                    <th>Proof</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {field.map((r, i) => (
+                    <tr key={r.runId}>
+                      <td className="rank">{i + 2}</td>
+                      <td>
+                        <a
+                          className="handle"
+                          href={`https://github.com/${r.handle}`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          {r.handle}
+                        </a>
+                      </td>
+                      <td className="gold num">⛁ {r.gold.toLocaleString()}</td>
+                      <td>{r.day}</td>
+                      <td>
+                        {r.receiptUrl ? (
+                          <a
+                            className="proof"
+                            href={r.receiptUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            receipt
+                          </a>
+                        ) : (
+                          <span className="badge">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
+        </>
       )}
     </>
   );

@@ -49,26 +49,32 @@ function stars(n: number): string {
   return '★'.repeat(filled) + '☆'.repeat(3 - filled);
 }
 
+/** Keystrokes vs par as a signed delta, e.g. "−3 under par" / "even with par". */
+function parDelta(keys: number, par: number): string {
+  const d = keys - par;
+  if (d === 0) return 'even with par';
+  if (d < 0) return `${Math.abs(d)} under par`;
+  return `${d} over par`;
+}
+
 export default async function TrialBoardPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { trial, rows, error } = await loadBoard(id);
   const title = trial?.title ?? id;
+  const [champion, ...field] = rows;
 
   return (
     <>
-      <p style={{ marginBottom: '0.25rem' }}>
-        <Link href="/trials">← All trials</Link>
+      <Link className="back-link" href="/trials">
+        ← all trials
+      </Link>
+      <p className="eyebrow">
+        {trial ? `Tier ${trial.tier} · par ${trial.par} keys` : 'Trial speedrun'}
       </p>
       <h1>{title}</h1>
-      <p className="empty" style={{ padding: '0.5rem 0' }}>
-        {trial ? (
-          <>
-            Tier {trial.tier} · par {trial.par} keys. The cleanest, fastest clears
-            of this trial — each backed by a video.
-          </>
-        ) : (
-          <>The cleanest, fastest clears of this trial — each backed by a video.</>
-        )}
+      <p className="lede">
+        The cleanest, fastest clears of this trial — fewest keystrokes break a tie on
+        the clock. Each backed by a video.
       </p>
 
       {error ? (
@@ -76,44 +82,89 @@ export default async function TrialBoardPage({ params }: { params: Promise<{ id:
       ) : rows.length === 0 ? (
         <p className="empty">No approved clears yet. Be the first to draw steel.</p>
       ) : (
-        <table>
-          <thead>
-            <tr>
-              <th className="rank">#</th>
-              <th>Knight</th>
-              <th>Time</th>
-              <th>Keys</th>
-              <th>Par</th>
-              <th>Stars</th>
-              <th>Proof</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r, i) => (
-              <tr key={r.runId}>
-                <td className="rank">{i + 1}</td>
-                <td>
-                  <a href={`https://github.com/${r.handle}`} target="_blank" rel="noreferrer">
-                    {r.handle}
-                  </a>
-                </td>
-                <td className="gold">{formatTime(r.durationMs)}</td>
-                <td>{r.keystrokes}</td>
-                <td>{r.par}</td>
-                <td>{stars(r.stars)}</td>
-                <td>
-                  {r.receiptUrl ? (
-                    <a href={r.receiptUrl} target="_blank" rel="noreferrer">
+        <>
+          <section className="champion" aria-label="Fastest clear">
+            <span className="champion-rank" aria-hidden="true">
+              1
+            </span>
+            <div>
+              <a
+                className="champion-name"
+                href={`https://github.com/${champion.handle}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                {champion.handle}
+              </a>
+              <p className="champion-meta">
+                <span className="stars">{stars(champion.stars)}</span>
+                {champion.receiptUrl ? (
+                  <>
+                    {' · '}
+                    <a href={champion.receiptUrl} target="_blank" rel="noreferrer">
                       video
                     </a>
-                  ) : (
-                    <span className="badge">—</span>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                  </>
+                ) : null}
+              </p>
+            </div>
+            <p className="champion-figure">
+              <span className="amount time tnum">{formatTime(champion.durationMs)}</span>
+              <span className="delta tnum">
+                {champion.keystrokes} keys · {parDelta(champion.keystrokes, champion.par)}
+              </span>
+            </p>
+          </section>
+
+          {field.length > 0 && (
+            <>
+              <p className="field-rule">The field</p>
+              <table>
+                <thead>
+                  <tr>
+                    <th className="rank">#</th>
+                    <th>Knight</th>
+                    <th className="num">Time</th>
+                    <th className="num">Keys</th>
+                    <th className="num">Par</th>
+                    <th>Stars</th>
+                    <th>Proof</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {field.map((r, i) => (
+                    <tr key={r.runId}>
+                      <td className="rank">{i + 2}</td>
+                      <td>
+                        <a
+                          className="handle"
+                          href={`https://github.com/${r.handle}`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          {r.handle}
+                        </a>
+                      </td>
+                      <td className="gold num">{formatTime(r.durationMs)}</td>
+                      <td className="num">{r.keystrokes}</td>
+                      <td className="num">{r.par}</td>
+                      <td className="stars">{stars(r.stars)}</td>
+                      <td>
+                        {r.receiptUrl ? (
+                          <a className="proof" href={r.receiptUrl} target="_blank" rel="noreferrer">
+                            video
+                          </a>
+                        ) : (
+                          <span className="badge">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
+        </>
       )}
     </>
   );
