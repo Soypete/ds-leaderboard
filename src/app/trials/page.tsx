@@ -46,7 +46,14 @@ export default async function TrialsIndexPage() {
       {error ? (
         <p className="empty">{error}</p>
       ) : tiers.length === 0 ? (
-        <p className="empty">No trials in the catalog yet. Sync the realm to raise the boards.</p>
+        <div className="empty">
+          <p>No trials in the catalog yet. Sync the realm to raise the boards.</p>
+          <p className="cta">
+            <a href="https://github.com/Soypete/ds-submissions#how-to-submit">
+              Submit your run →{'\u2002'}
+            </a>
+          </p>
+        </div>
       ) : (
         tiers.map(({ tier, trials }) => (
           <section className="tier" key={tier}>

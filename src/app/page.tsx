@@ -31,7 +31,14 @@ export default async function GoldBoardPage() {
       {error ? (
         <p className="empty">{error}</p>
       ) : rows.length === 0 ? (
-        <p className="empty">No approved hauls yet. Be the first to ride.</p>
+        <div className="empty">
+          <p>No approved hauls yet. Be the first to ride.</p>
+          <p className="cta">
+            <a href="https://github.com/Soypete/ds-submissions#how-to-submit">
+              Submit your run →{'\u2002'}
+            </a>
+          </p>
+        </div>
       ) : (
         <>
           <section className="champion" aria-label="Current leader">
