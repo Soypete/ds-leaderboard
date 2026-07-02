@@ -4,6 +4,10 @@
 -- RLS is ON for every table: the browser (anon key) sees only approved rows and
 -- public guilds; all writes go through the service-role key in server routes.
 
+-- Use a dedicated schema for this project
+create schema if not exists ds_leaderboard;
+alter database set search_path to ds_leaderboard, public;
+
 -- ── Extensions ────────────────────────────────────────────────────────────────
 create extension if not exists "pgcrypto";  -- gen_random_uuid()
 

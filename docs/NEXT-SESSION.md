@@ -49,6 +49,50 @@ To do:
   hand-rolled cookie seams) — user wanted this "before launch".
 - 6 Dependabot advisories on the repo (1 critical) — triage.
 
+## Manual testing walkthrough
+
+Start the stack:
+```bash
+npm run dev:up      # local Supabase
+npm run dev         # http://localhost:3000
+```
+
+### Checklist
+
+**Boards render** (no sign-in):
+- `/` — gold board
+- `/trials/t1-first-steps` — trial board
+- `/guilds/roundtable` — public guild board
+- `/moderate` — pending queue
+
+**Dev login** (fake GitHub OAuth):
+- `http://localhost:3000/api/dev/login?as=captainnobody1` → owner controls
+- `as=sirlintsalot` → mod controls
+- `as=dame-refactor` → member (leave only)
+
+**Guild ownership** (signed in as owner):
+- [ ] make mod / demote
+- [ ] make owner (transfer)
+- [ ] remove member
+- [ ] abdicate & leave
+
+**Submit pipe**:
+```bash
+cd ../DragonSlayer
+npm run dev -- leaderboard whoami --set <your-handle>
+npm run dev -- leaderboard receipt --out /tmp/run.json
+# POST like the Action does
+cd ../ds-leaderboard
+SECRET=$(grep INGEST_SHARED_SECRET .env.local | cut -d= -f2)
+payload=$(jq -nc --slurpfile r /tmp/run.json --arg a <your-handle> --arg u "https://example/pr/1" \
+  '{receipt:$r[0], author:$a, receiptUrl:$u}')
+curl -s -X POST localhost:3000/api/ingest -H "Authorization: Bearer $SECRET" \
+  -H 'Content-Type: application/json' -d "$payload"
+```
+- Verify in `/moderate`, approve, check board
+
+---
+
 ## Suggested first move next session
 Build issue #5 (media required) — it's fully planned, decisions locked, migration
 already in place. Then CLI device-flow submit, then deploy.
