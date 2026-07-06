@@ -29,25 +29,17 @@ gme leaderboard trials --json          # dump the trial catalog
 
 ## 2. Submitting a run (open a PR)
 
-Today, submitting = opening a pull request to the **submissions repo**
-([ds-submissions](https://github.com/Soypete/ds-submissions)).
+Submitting = opening a pull request to the **submissions repo** — its
+[README](https://github.com/Soypete/ds-submissions#readme) is the canonical
+step-by-step (filename rules, validation checks, troubleshooting).
 
-1. Seal your receipt to a file under `receipts/`:
-   ```bash
-   gme leaderboard receipt --out receipts/<your-handle>-<YYYY-MM-DD>.json
-   ```
-2. **Attach your proof media** in the PR — a **screenshot** for a daily-gold haul, a
-   **video** for a trial speedrun. Drag-and-drop into the PR description (works for
-   images and video), or paste a link. (`gh pr create --body` with a link works too;
-   plain `git` can't attach media.)
-3. Open the PR. The ingest Action checks your handle matches the PR author and that
-   the receipt hash is intact, then files your run as **pending**.
-4. A maintainer **approves the PR** and then approves the run in the moderator queue.
-   Only then does it appear on the public board.
-
-**The rules:** your receipt's `githubHandle` must equal the PR author (you can only
-submit your own runs); the media is the real proof of the run — the hash only proves
-the file wasn't edited.
+The short version: seal your receipt to
+`receipts/<your-handle>-<YYYY-MM-DD>.json`, open a PR adding that one file with
+your proof media attached (screenshot for gold, video for trials). An Action
+validates the receipt on the PR; a maintainer's **merge** files it as a
+**pending** run; a moderator then approves it onto the public board. Your
+receipt's `githubHandle` must equal the PR author — the media is the real
+proof of the run; the hash only proves the file wasn't edited.
 
 ## 3. Guilds — private & team boards
 

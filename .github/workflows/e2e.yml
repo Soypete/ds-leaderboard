@@ -1,0 +1,68 @@
+# E2E — Playwright against a real local Supabase stack.
+#
+# Deliberately NOT part of the required PR checks yet: `supabase start` pulls
+# images and takes 3–5 minutes cold, so this runs on a weekly schedule and on
+# demand (workflow_dispatch). Promote it to PR-blocking once it has proven
+# stable. Locally the same suite is just: npm run dev:up && npm run test:e2e.
+
+name: E2E
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 6 * * 1' # Mondays 06:00 UTC
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      # GitHub's ubuntu runners ship Docker, so the CLI drives it directly —
+      # scripts/dev-up.sh's Podman detection is a local-machine concern.
+      - name: Start local Supabase (migrations + seed)
+        run: |
+          supabase start
+          supabase db reset
+
+      - name: Write .env.local from the local stack
+        run: |
+          eval "$(supabase status -o env \
+            --override-name api.url=NEXT_PUBLIC_SUPABASE_URL \
+            --override-name auth.anon_key=NEXT_PUBLIC_SUPABASE_ANON_KEY \
+            --override-name auth.service_role_key=SUPABASE_SERVICE_ROLE_KEY | sed 's/^/export /')"
+          cat > .env.local <<EOF
+          NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
+          NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY
+          SUPABASE_SERVICE_ROLE_KEY=$SUPABASE_SERVICE_ROLE_KEY
+          INGEST_SHARED_SECRET=e2e-ci-shared-secret
+          SUPABASE_MEDIA_BUCKET=ds-media
+          NEXT_PUBLIC_SUPABASE_MEDIA_BUCKET=ds-media
+          MODERATOR_HANDLES=captainnobody1
+          EOF
+
+      - run: npx playwright install --with-deps chromium
+
+      - run: npm run test:e2e
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7

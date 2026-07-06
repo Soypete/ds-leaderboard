@@ -1,57 +1,61 @@
 # Self-hosting the Dragonslayer leaderboard
 
-For teams who want the boards on their own infrastructure instead of the hosted
-Supabase + Vercel deployment. Same app, same schema — the storage and auth
-layers swap to local equivalents.
+For anyone who wants their own boards instead of (or alongside) the hosted
+Supabase + Vercel deployment. The app talks to **Supabase** — database, storage,
+and auth all go through the Supabase client. Self-hosting means bringing your
+own Supabase backend and running the app container against it.
 
-## What runs
+## The two supported paths
 
-`docker compose` (or `podman compose`) brings up three services:
+### Path A — your own Supabase project (easiest)
 
-- **db** — Postgres 16. The `supabase/migrations/*.sql` files are applied in
-  order on first boot (the same migrations the hosted deployment uses).
-- **minio** — S3-compatible object storage for media, in place of Supabase
-  Storage. A one-shot `minio-init` creates the `ds-media` bucket.
-- **app** — the Next.js leaderboard, built from `self-host/Dockerfile`.
+1. Create a project at [supabase.com](https://supabase.com) (free tier is fine
+   through the MVP).
+2. Apply the schema: `supabase link --project-ref <your-ref>` then
+   `supabase db push` (applies `supabase/migrations/*.sql` in order).
+3. Create the media bucket named in `SUPABASE_MEDIA_BUCKET` (default
+   `ds-media`) via Studio → Storage.
+4. Run the app anywhere Node 22 runs — Vercel (see `HOSTING.md`), or the
+   container below — with the env vars from `.env.example`.
 
-## Quick start
+### Path B — fully on-prem with self-hosted Supabase
+
+Run Supabase's official self-hosted stack
+([supabase.com/docs/guides/self-hosting](https://supabase.com/docs/guides/self-hosting)
+— their docker-compose bundles Postgres, Auth, Storage, and the API gateway),
+then treat it exactly like Path A: apply the migrations, create the bucket,
+point the app's env vars at your gateway URL and keys.
+
+## Running the app container
+
+`self-host/Dockerfile` builds a standalone Next.js image (uses
+`output: 'standalone'` from `next.config.mjs`):
 
 ```bash
-cd self-host
-cp .env.selfhost.example .env     # fill in secrets
-docker compose up -d              # or: podman compose up -d
-# open http://localhost:3000  (MinIO console: http://localhost:9001)
+docker build -f self-host/Dockerfile -t ds-leaderboard .
+docker run -p 3000:3000 --env-file .env ds-leaderboard
 ```
 
-## What works fully vs. what needs more
+Required env (see `.env.example` for the full commentary):
 
-- **Fully self-hosted:** the gold-per-day board, per-trial speedrun boards,
-  receipt ingest (POST to `/api/ingest` with `INGEST_SHARED_SECRET`), the
-  trial-catalog sync, moderation (approve/reject with the media gate), and media
-  upload to MinIO.
-- **Needs a decision:** guild **sign-in** uses GitHub OAuth via Supabase Auth.
-  On-prem you either (a) point at a reachable Supabase Auth instance, or (b) run
-  the documented "one guild = the whole instance, no per-user auth" mode where
-  the shared secret gates moderation and everyone shares one board. The boards
-  themselves don't require auth; only private-guild membership does.
+- `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY` (server only)
+- `INGEST_SHARED_SECRET` (a long random string; mirror it into your
+  submissions repo's Actions secrets)
+- `SUPABASE_MEDIA_BUCKET`, `NEXT_PUBLIC_SUPABASE_MEDIA_BUCKET`
+- `MODERATOR_HANDLES` (comma-separated, lowercased — your handle, not the
+  upstream default)
 
-## Differences from the hosted setup
+## Wiring your own submission flow
 
-| Concern | Hosted | Self-host |
-|---|---|---|
-| Database | Supabase Postgres | Postgres container |
-| Media storage | Supabase Storage | MinIO (S3 API) |
-| Auth | Supabase Auth + GitHub OAuth | reachable Supabase Auth, or no-auth single-guild mode |
-| App host | Vercel | the `app` container |
+Fork [ds-submissions](https://github.com/Soypete/ds-submissions) and set its
+two Actions secrets — `INGEST_URL` (your `/api/ingest`) and
+`INGEST_SHARED_SECRET`. PR validation needs no secrets; only the post-merge
+ingest workflow uses them.
 
-The schema (`supabase/migrations/`) and all application code are identical — only
-environment wiring differs, so updates flow to both deployments from one codebase.
+## What about a raw Postgres + MinIO stack (no Supabase)?
 
-## Notes
-
-- The `app` image uses Next.js `output: 'standalone'` (set in `next.config.mjs`).
-- Postgres only runs the init migrations on an **empty** data volume. To re-apply
-  after schema changes, either add new numbered migration files (they won't
-  re-run automatically — apply them with `psql`) or `docker compose down -v` to
-  wipe and re-init (destroys data).
-- For real deployments, change every default password in `.env`.
+Not supported. The app's data, storage, and auth layers use the Supabase
+client exclusively — a `DATABASE_URL`/S3 adapter would be new code, tracked as
+a future enhancement in the repo's issues. If you need on-prem today, Path B
+(self-hosted Supabase) is the supported route.

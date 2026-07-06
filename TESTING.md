@@ -20,11 +20,33 @@ Run these before every merge. All must be green.
 cd ds-leaderboard
 npm test            # vitest — 83 tests (receipt, storage, guilds, trial-sync)
 npm run typecheck   # tsc --noEmit
+npm run lint        # next lint (eslint-config-next)
 npm run build       # next build — all routes compile, static pages generate
 ```
 What the unit tests cover: receipt hash/verify, slug + invite-token rules, the
 guild board queries, and **guild ownership** — creation cap, removeMember, leave +
 auto-promote, setMemberRole, transferOwnership (each guard has a test).
+
+CI (`.github/workflows/ci.yml`) runs all four on every PR and push to main,
+with dummy Supabase env vars so `next build` never needs a live backend.
+
+### ds-leaderboard e2e (Playwright, real local stack)
+```bash
+cd ds-leaderboard
+npm run dev:up      # local Supabase (migrations + seed) — one-time per session
+npm run test:e2e    # playwright — boots `next dev` itself via webServer
+```
+Prereqs: the local Supabase stack from §2 and a filled-in `.env.local` (the
+specs read `INGEST_SHARED_SECRET` from it via `e2e/helpers.ts`). The suite
+covers: the public boards rendering seed data (and pending rows staying off
+them), the moderator queue, `/api/moderate` auth, the dev-login seam, and the
+full submit pipe — ingest → screenshot record (`/api/media/confirm`) →
+approve → public board — plus tamper/impostor rejections. Specs use a unique
+handle per run, so they're re-runnable without `npm run dev:reset`.
+
+In CI, `.github/workflows/e2e.yml` runs the same suite weekly and on demand
+(`workflow_dispatch`) — it's not a required PR check yet because the Supabase
+cold start costs 3–5 minutes; promote it once it has proven stable.
 
 ### DragonSlayer (the game/CLI)
 ```bash
@@ -34,11 +56,16 @@ npm run typecheck
 npm run mutation    # stryker (optional, slow) — mutation testing on the vim engine
 ```
 
-### ds-submissions (the Action)
-The ingest workflow (`.github/workflows/ingest-receipt.yml`) runs automatically on
-any PR touching `receipts/*.json`. It checks `handle == PR author`, the receipt
-hash, and POSTs to the live `/api/ingest`. **Test it by opening a real PR** (see
-§2.4) — there's no local unit test for the YAML itself.
+### ds-submissions (the validator + Actions)
+```bash
+cd ds-submissions
+npm test            # node --test — validator golden-fixture + tamper cases
+node scripts/validate-receipt.mjs examples/dragonlord-2026-06-30.json --author dragonlord
+```
+Submission CI is two-stage: `validate-receipt.yml` checks every PR (schema,
+contentHash, filename, handle == PR author — no secrets, fork-safe) and
+`ingest-on-merge.yml` POSTs to the live `/api/ingest` after a maintainer
+merges. **Test the full loop by opening a real PR** (see §2.4).
 
 > **Cache gotcha:** running `npm run build` while `npm run dev` is live corrupts the
 > dev server's `.next` (you'll see `Cannot find module './NNN.js'` 500s). Fix:

@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import type { ReactNode } from 'react';
 
 import './globals.css';
@@ -24,20 +25,20 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       </head>
       <body>
         <header className="masthead">
-          <a href="/" className="brand">
+          <Link href="/" className="brand">
             <span className="brand-mark" aria-hidden="true">
               ⚔
             </span>
             <span className="brand-name">Dragonslayer</span>
             <span className="brand-sub">standings</span>
-          </a>
+          </Link>
           <nav>
-            <a href="/">Gold</a>
-            <a href="/trials">Trials</a>
-            <a href="/guilds">Guilds</a>
-            <a href="/login" className="nav-oath">
+            <Link href="/">Gold</Link>
+            <Link href="/trials">Trials</Link>
+            <Link href="/guilds">Guilds</Link>
+            <Link href="/login" className="nav-oath">
               Take the oath
-            </a>
+            </Link>
           </nav>
         </header>
         <main>{children}</main>

@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -28,6 +30,22 @@ function sealed(overrides: Partial<Omit<Receipt, 'contentHash'>> = {}): Receipt 
 }
 
 describe('verifyReceiptHash', () => {
+  it('golden receipt hashes to the pinned digest (cross-repo wire-format lock)', () => {
+    // The same fixture + digest are pinned in the game (DragonSlayer
+    // src/ui/receipt.test.ts) and ds-submissions
+    // (scripts/validate-receipt.test.mjs). If this fails you changed the wire
+    // format: bump dragonslayer-receipt/vN and update this mirror plus
+    // ds-submissions/scripts/validate-receipt.mjs together with the game's
+    // src/ui/receipt.ts. See the game's docs/LEADERBOARD.md for the spec.
+    const golden = JSON.parse(
+      readFileSync(new URL('./__fixtures__/golden-receipt.json', import.meta.url), 'utf8'),
+    ) as Receipt;
+    const { contentHash, ...rest } = golden;
+    expect(contentHash).toBe('172759319a063fbd7912a5dfeb33258929102650e3d54e7c8a6581ac0e91efa0');
+    expect(hashReceipt(rest)).toBe(contentHash);
+    expect(verifyReceiptHash(golden)).toBe(true);
+  });
+
   it('passes a correctly-sealed receipt', () => {
     expect(verifyReceiptHash(sealed())).toBe(true);
   });

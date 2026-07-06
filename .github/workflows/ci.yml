@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      # Dummy values so `next build` can collect page data without a real
+      # Supabase project. Nothing in CI talks to a live backend.
+      NEXT_PUBLIC_SUPABASE_URL: http://localhost:54321
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: dummy
+      SUPABASE_SERVICE_ROLE_KEY: dummy
+      INGEST_SHARED_SECRET: dummy
+      SUPABASE_MEDIA_BUCKET: ds-media
+      NEXT_PUBLIC_SUPABASE_MEDIA_BUCKET: ds-media
+      MODERATOR_HANDLES: dummy
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      - run: npm run lint
+
+      - run: npm test
+
+      - run: npm run build
