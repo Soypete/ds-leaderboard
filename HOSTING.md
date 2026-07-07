@@ -61,9 +61,47 @@ are the standing config it depends on.)
 
 ### 1. Supabase
 1. Create a project (free tier). Note the **Project URL**, **anon key**, **service-role key**.
-2. Apply the schema: `supabase db push` (or paste `supabase/migrations/0001_init.sql` into the
-   SQL editor).
+2. Apply the schema — **all four migrations**, in order (see "Running database
+   migrations" below). Quickest path: paste `supabase/all-migrations.sql` into
+   the SQL editor and run it.
 3. Create a Storage bucket `ds-media` (public). Set the CORS JSON above.
+4. Load the trial catalog (the per-trial boards are empty without it):
+   ```bash
+   cd ../DragonSlayer && npm run dev -- leaderboard trials --json > /tmp/trials.json
+   curl -X POST https://YOUR-APP.vercel.app/api/sync-trials \
+     -H "Authorization: Bearer $INGEST_SHARED_SECRET" \
+     -H 'Content-Type: application/json' -d @/tmp/trials.json
+   ```
+
+## Running database migrations
+
+Migrations live in `supabase/migrations/*.sql`, numbered and applied **in
+order**. Everything targets the **`public` schema** (the app's supabase-js
+clients query the default schema). `supabase/seed.sql` is **local-dev only —
+never run it against production** (it inserts fake players and runs).
+
+**Path A — SQL editor (no tooling):** open the project's SQL editor and run
+`supabase/all-migrations.sql` (a generated concatenation of 0001→0004; safe on
+a fresh project). For a project that already has some migrations applied, run
+only the new numbered files, in order.
+
+**Path B — Supabase CLI (repeatable, tracks state):**
+```bash
+supabase login
+supabase link --project-ref <your-project-ref>   # ref is in the dashboard URL
+supabase db push                                  # applies unapplied migrations in order
+```
+
+**Adding a migration:** create the next-numbered file
+(`supabase/migrations/0005_<name>.sql`); verify locally with
+`npm run dev:reset` (drops + replays all migrations + seed); apply to hosted
+with `supabase db push` (or paste the new file in the SQL editor); regenerate
+`all-migrations.sql` by concatenating the files.
+
+**Verify it worked:** Table Editor should show 9 tables (`players`, `guilds`,
+`guild_members`, `guild_invites`, `trials`, `daily_gold_runs`, `trial_runs`,
+`media_assets`, `verification_events`), and the deployed gold board's
+"Could not find the table 'public.daily_gold_runs'" notice disappears.
 
 ### 2. Vercel
 1. Import this repo. Framework preset: **Next.js**.
