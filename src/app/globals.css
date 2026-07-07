@@ -1,146 +1,609 @@
-/* Dragonslayer palette — mirrors the game's theme (gold/verdant/ember/parchment). */
+/* ============================================================================
+   Dragonslayer — Leaderboards
+   A herald's standings board rendered as an illuminated terminal ledger.
+
+   Two type voices, on purpose: an inscriptional serif (Cinzel) for heralds and
+   the champion — engraved, ceremonial — set against a CLI monospace field, which
+   IS the subject (a terminal game). The contrast is the design. Gold is the only
+   loud color; everything else is quiet ruled lines on the Gruvbox dark substrate.
+   ========================================================================== */
+
 :root {
-  --gold: #d8a657;
-  --verdant: #89b482;
-  --ember: #ea6962;
-  --torch: #e3a84e;
-  --steel: #7c6f64;
-  --parchment: #d4be98;
-  --banner: #a9b665;
+  /* Substrate (existing game palette — Gruvbox) */
   --bg: #1d2021;
   --panel: #282828;
   --ink: #ebdbb2;
+  --steel: #7c6f64;
+  --parchment: #d4be98;
+
+  /* Accents */
+  --gold: #d8a657;
+  --gold-deep: #b47109; /* banner edge / engraving */
+  --torch: #e3a84e;     /* pending */
+  --verdant: #89b482;   /* go / approve */
+  --ember: #ea6962;     /* alert / reject */
+  --banner: #a9b665;
+
+  /* Structure */
+  --aged: #3c3836;      /* hairline rules, warmer than panel */
+  --rule: #4a4540;      /* slightly brighter rule for emphasis */
+
+  --herald: 'Cinzel', 'Iowan Old Style', Palatino, 'Times New Roman', serif;
+  --mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+
+  --measure: 880px;
 }
 
 * {
   box-sizing: border-box;
 }
 
+html {
+  scrollbar-color: var(--steel) var(--bg);
+}
+
 body {
   margin: 0;
-  background: var(--bg);
+  background:
+    radial-gradient(120% 60% at 50% -10%, rgba(180, 113, 9, 0.08), transparent 60%),
+    var(--bg);
   color: var(--ink);
-  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-  line-height: 1.5;
+  font-family: var(--mono);
+  line-height: 1.55;
+  font-variant-ligatures: none;
+  -webkit-font-smoothing: antialiased;
 }
+
+/* Ledger figures: align like a tally sheet. */
+.tnum {
+  font-variant-numeric: tabular-nums slashed-zero;
+}
+
+/* ── Masthead ─────────────────────────────────────────────────────────────── */
 
 .masthead {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
-  padding: 1rem 1.5rem;
-  border-bottom: 1px solid var(--steel);
+  gap: 1rem;
+  flex-wrap: wrap;
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding: 1.25rem 1.5rem 1rem;
+  border-bottom: 1px solid var(--aged);
 }
 
 .brand {
-  color: var(--gold);
-  font-weight: 700;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.5rem;
   text-decoration: none;
-  font-size: 1.1rem;
+  color: var(--ink);
+}
+
+.brand-mark {
+  color: var(--gold);
+  font-size: 1.15rem;
+}
+
+.brand-name {
+  font-family: var(--herald);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  font-size: 1.15rem;
+  color: var(--ink);
+}
+
+.brand-sub {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.28em;
+  color: var(--steel);
+}
+
+.masthead nav {
+  display: flex;
+  align-items: baseline;
+  gap: 1.4rem;
+  font-size: 0.85rem;
 }
 
 .masthead nav a {
   color: var(--parchment);
   text-decoration: none;
-  margin-left: 1.25rem;
+  text-transform: lowercase;
+  letter-spacing: 0.02em;
+  border-bottom: 1px solid transparent;
+  padding-bottom: 2px;
+  transition: color 0.15s ease, border-color 0.15s ease;
 }
 
 .masthead nav a:hover {
   color: var(--gold);
+  border-bottom-color: var(--gold-deep);
 }
 
+.nav-oath {
+  color: var(--gold) !important;
+}
+
+/* ── Page shell ───────────────────────────────────────────────────────────── */
+
 main {
-  max-width: 880px;
+  max-width: var(--measure);
   margin: 0 auto;
-  padding: 1.5rem;
+  padding: 2.5rem 1.5rem 1rem;
+}
+
+/* Herald: the page's title, engraved. */
+.eyebrow {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.34em;
+  color: var(--gold);
+  margin: 0 0 0.5rem;
 }
 
 h1 {
+  font-family: var(--herald);
+  font-weight: 600;
+  font-size: clamp(1.9rem, 4.5vw, 2.9rem);
+  line-height: 1.05;
+  letter-spacing: 0.01em;
+  color: var(--ink);
+  margin: 0 0 0.6rem;
+}
+
+.lede {
+  color: var(--parchment);
+  max-width: 56ch;
+  margin: 0 0 2rem;
+  font-size: 0.95rem;
+}
+
+.empty {
+  color: var(--parchment);
+  padding: 1.5rem 0;
+}
+
+.empty .cta {
+  margin-top: 1rem;
+}
+
+.empty .cta a {
+  display: inline-block;
+  padding: 0.6rem 1.2rem;
+  background: var(--gold-deep);
+  color: #1a1a1a;
+  font-weight: 600;
+  text-decoration: none;
+  border-radius: 3px;
+  transition: background 0.2s;
+}
+
+.empty .cta a:hover {
+  background: var(--gold);
+}
+
+/* ── Champion banner (the signature) ──────────────────────────────────────── */
+
+.champion {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 1.25rem;
+  padding: 1.4rem 1.6rem;
+  margin-bottom: 0.5rem;
+  background: linear-gradient(180deg, rgba(216, 166, 87, 0.07), rgba(40, 40, 40, 0.4));
+  border: 1px solid var(--gold-deep);
+  border-radius: 3px;
+  box-shadow:
+    inset 0 0 0 1px rgba(216, 166, 87, 0.12),
+    0 1px 0 rgba(0, 0, 0, 0.4);
+}
+
+/* engraved corner ticks */
+.champion::before,
+.champion::after {
+  content: '';
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border: 1px solid var(--gold);
+  opacity: 0.6;
+}
+.champion::before {
+  top: 6px;
+  left: 6px;
+  border-right: 0;
+  border-bottom: 0;
+}
+.champion::after {
+  bottom: 6px;
+  right: 6px;
+  border-left: 0;
+  border-top: 0;
+}
+
+.champion-rank {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-family: var(--herald);
+  font-weight: 700;
+  font-size: 2.6rem;
   color: var(--gold);
+  line-height: 1;
+  padding-right: 1.25rem;
+  margin-right: 0.25rem;
+  border-right: 1px solid var(--gold-deep);
+}
+/* a small crown over the champion's numeral — the herald's mark */
+.champion-rank::before {
+  content: '♔';
+  font-family: var(--mono);
+  font-size: 0.9rem;
+  color: var(--gold-deep);
+  margin-bottom: 0.2rem;
+}
+
+.champion-name {
+  display: block;
+  font-family: var(--herald);
+  font-weight: 600;
+  font-size: clamp(1.3rem, 3.5vw, 1.9rem);
+  letter-spacing: 0.02em;
+  color: var(--ink);
+  text-decoration: none;
+}
+.champion-name:hover {
+  color: var(--gold);
+}
+
+.champion-meta {
+  font-size: 0.78rem;
+  color: var(--steel);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-top: 0.35rem;
+}
+.champion-meta a {
+  color: var(--banner);
+  text-decoration: none;
+}
+.champion-meta a:hover {
+  color: var(--gold);
+}
+
+.champion-figure {
+  text-align: right;
+  white-space: nowrap;
+}
+.champion-figure .amount {
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: clamp(1.5rem, 4vw, 2.2rem);
+  color: var(--gold);
+}
+.champion-figure .unit {
+  display: block;
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  color: var(--steel);
+  margin-top: 0.15rem;
+}
+
+/* ── The field (ruled ledger rows) ────────────────────────────────────────── */
+
+.field-rule {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 1.75rem 0 0.25rem;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.26em;
+  color: var(--steel);
+}
+.field-rule::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--aged);
 }
 
 table {
   width: 100%;
   border-collapse: collapse;
-  margin-top: 1rem;
 }
 
-th,
-td {
+thead th {
   text-align: left;
   padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid var(--panel);
-}
-
-th {
   color: var(--steel);
   font-weight: 600;
   text-transform: uppercase;
-  font-size: 0.75rem;
-  letter-spacing: 0.05em;
+  font-size: 0.68rem;
+  letter-spacing: 0.14em;
+  border-bottom: 1px solid var(--rule);
+}
+thead th.rank,
+td.rank {
+  width: 3.25rem;
+  text-align: right;
+  padding-right: 1rem;
+}
+thead th.num,
+td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums slashed-zero;
 }
 
-tbody tr:nth-child(1) td {
-  color: var(--gold);
-  font-weight: 700;
+tbody td {
+  padding: 0.7rem 0.75rem;
+  border-bottom: 1px solid var(--aged);
+  vertical-align: baseline;
+}
+
+tbody tr {
+  transition: background 0.12s ease;
+}
+tbody tr:hover {
+  background: rgba(216, 166, 87, 0.04);
+}
+
+td.rank {
+  color: var(--steel);
+  font-variant-numeric: tabular-nums;
 }
 
 td.gold {
   color: var(--gold);
+  font-variant-numeric: tabular-nums slashed-zero;
+  font-weight: 600;
 }
 
-.rank {
-  color: var(--steel);
-  width: 3rem;
+/* handle cell */
+.handle {
+  color: var(--ink);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+}
+.handle:hover {
+  color: var(--gold);
+  border-bottom-color: var(--gold-deep);
 }
 
 a {
   color: var(--banner);
 }
 
-.empty {
+/* receipt / proof links read as quiet utility */
+.proof {
+  color: var(--steel);
+  font-size: 0.82rem;
+  text-decoration: none;
+  border-bottom: 1px dotted var(--steel);
+}
+.proof:hover {
   color: var(--parchment);
-  padding: 2rem 0;
+  border-bottom-color: var(--parchment);
 }
 
-.footer {
-  max-width: 880px;
-  margin: 2rem auto;
-  padding: 1rem 1.5rem;
-  color: var(--steel);
-  border-top: 1px solid var(--panel);
-  font-size: 0.85rem;
+/* champion variant: a time/duel figure rather than a gold tally */
+.champion-figure .amount.time {
+  color: var(--verdant);
 }
+.champion-figure .delta {
+  display: block;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  color: var(--steel);
+  margin-top: 0.2rem;
+  text-transform: none;
+}
+
+/* stars: filled in gold, hollow in steel — kept on one baseline */
+.stars {
+  color: var(--gold);
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+/* ── Trials catalog ───────────────────────────────────────────────────────── */
+
+.back-link {
+  display: inline-block;
+  margin-bottom: 1.25rem;
+  font-size: 0.82rem;
+  color: var(--steel);
+  text-decoration: none;
+}
+.back-link:hover {
+  color: var(--gold);
+}
+
+.tier {
+  margin-top: 2rem;
+}
+
+.tier-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin: 0 0 0.5rem;
+}
+.tier-num {
+  font-family: var(--herald);
+  font-weight: 600;
+  font-size: 1.15rem;
+  color: var(--gold);
+}
+.tier-label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  color: var(--steel);
+}
+
+.trial-link {
+  color: var(--ink);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+}
+.trial-link:hover {
+  color: var(--gold);
+  border-bottom-color: var(--gold-deep);
+}
+
+/* ── Badges / buttons ─────────────────────────────────────────────────────── */
 
 .badge {
   font-size: 0.7rem;
-  padding: 0.1rem 0.4rem;
-  border-radius: 0.25rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 2px;
   border: 1px solid var(--steel);
   color: var(--parchment);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
-
 .badge.pending {
   border-color: var(--torch);
   color: var(--torch);
 }
+.badge.owner {
+  border-color: var(--gold-deep);
+  color: var(--gold);
+}
+
+/* ── Roster management ────────────────────────────────────────────────────── */
+
+.roster-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+.roster-actions form {
+  display: inline;
+  margin: 0;
+}
+.roster-actions .btn {
+  font-size: 0.78rem;
+  padding: 0.25rem 0.6rem;
+}
+
+.roster-you {
+  margin-left: 0.5rem;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--steel);
+}
+
+.roster-leave {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  margin-top: 1.25rem;
+  flex-wrap: wrap;
+}
+.roster-hint {
+  font-size: 0.8rem;
+  color: var(--steel);
+  max-width: 46ch;
+}
 
 .btn {
-  font-family: inherit;
+  font-family: var(--mono);
   background: var(--panel);
   color: var(--ink);
   border: 1px solid var(--steel);
-  border-radius: 0.25rem;
-  padding: 0.3rem 0.7rem;
+  border-radius: 2px;
+  padding: 0.35rem 0.8rem;
   cursor: pointer;
+  font-size: 0.85rem;
 }
-
+.btn:hover {
+  border-color: var(--parchment);
+}
 .btn.approve {
   border-color: var(--verdant);
   color: var(--verdant);
 }
-
 .btn.reject {
   border-color: var(--ember);
   color: var(--ember);
+}
+
+/* ── Footer ───────────────────────────────────────────────────────────────── */
+
+.footer {
+  max-width: var(--measure);
+  margin: 3rem auto 1.5rem;
+  padding: 1.25rem 1.5rem;
+  color: var(--steel);
+  border-top: 1px solid var(--aged);
+  font-size: 0.82rem;
+}
+
+.footer-creed {
+  margin: 0 0 0.85rem;
+  font-style: italic;
+  color: var(--parchment);
+}
+
+.footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  margin-bottom: 0.85rem;
+}
+.footer-links a {
+  color: var(--parchment);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  padding-bottom: 1px;
+}
+.footer-links a:hover {
+  color: var(--gold);
+  border-bottom-color: var(--gold-deep);
+}
+
+.footer-copyright {
+  margin: 0;
+  color: var(--steel);
+}
+
+/* ── Quality floor ────────────────────────────────────────────────────────── */
+
+:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+  border-radius: 1px;
+}
+
+@media (max-width: 560px) {
+  .champion {
+    grid-template-columns: auto 1fr;
+    gap: 0.75rem 1rem;
+  }
+  .champion-figure {
+    grid-column: 1 / -1;
+    text-align: left;
+    border-top: 1px solid var(--aged);
+    padding-top: 0.75rem;
+  }
+  .masthead nav {
+    gap: 1rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
 }

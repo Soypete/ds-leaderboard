@@ -4,6 +4,11 @@
 -- RLS is ON for every table: the browser (anon key) sees only approved rows and
 -- public guilds; all writes go through the service-role key in server routes.
 
+-- Everything lives in the `public` schema — the app's supabase-js clients query
+-- the default schema, and PostgREST exposes `public` out of the box. (An earlier
+-- revision tried a dedicated `ds_leaderboard` schema here; the statement was
+-- invalid SQL and never took effect, so `public` is the schema of record.)
+
 -- ── Extensions ────────────────────────────────────────────────────────────────
 create extension if not exists "pgcrypto";  -- gen_random_uuid()
 

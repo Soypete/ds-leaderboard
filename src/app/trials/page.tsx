@@ -1,13 +1,91 @@
-export default function TrialsPage() {
+import Link from 'next/link';
+
+import { browserClient, type TrialRow } from '@/lib/db';
+import { listTrials } from '@/lib/trial-boards';
+
+// Revalidate the catalog every 5 min (ISR) — it only changes when a sync runs.
+export const revalidate = 300;
+
+async function loadTrials(): Promise<{ rows: TrialRow[]; error: string | null }> {
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+    return { rows: [], error: 'Supabase is not configured yet — set env vars to see the trial roster.' };
+  }
+  try {
+    return { rows: await listTrials(browserClient()), error: null };
+  } catch (err) {
+    return { rows: [], error: (err as Error).message };
+  }
+}
+
+/** Group the flat catalog into tiers, preserving the catalog's order. */
+function byTier(rows: TrialRow[]): { tier: number; trials: TrialRow[] }[] {
+  const groups = new Map<number, TrialRow[]>();
+  for (const r of rows) {
+    const list = groups.get(r.tier) ?? [];
+    list.push(r);
+    groups.set(r.tier, list);
+  }
+  return [...groups.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([tier, trials]) => ({ tier, trials }));
+}
+
+export default async function TrialsIndexPage() {
+  const { rows, error } = await loadTrials();
+  const tiers = byTier(rows);
+
   return (
     <>
-      <h1>Vim Trial Speedruns</h1>
-      <p className="empty">
-        Per-trial speedrun boards land in Phase 2 — one board per trial, ranked
-        by time, each backed by a video. The data model (trial_runs, the trials
-        catalog, video media) is already in place; the boards and the catalog
-        sync are the next build.
+      <p className="eyebrow">Vim trial speedruns</p>
+      <h1>One board per trial. Fastest blade first.</h1>
+      <p className="lede">
+        Each trial is its own duel, ranked by time then keystrokes. Pick one to see
+        who cleared it cleanest. Approved runs only; each backed by a video.
       </p>
+
+      {error ? (
+        <p className="empty">{error}</p>
+      ) : tiers.length === 0 ? (
+        <div className="empty">
+          <p>No trials in the catalog yet. Sync the realm to raise the boards.</p>
+          <p className="cta">
+            <a href="https://github.com/Soypete/ds-submissions#how-to-submit">
+              Submit your run →{'\u2002'}
+            </a>
+          </p>
+        </div>
+      ) : (
+        tiers.map(({ tier, trials }) => (
+          <section className="tier" key={tier}>
+            <p className="tier-head">
+              <span className="tier-num">Tier {tier}</span>
+              <span className="tier-label">
+                {trials.length} {trials.length === 1 ? 'trial' : 'trials'}
+              </span>
+            </p>
+            <table>
+              <thead>
+                <tr>
+                  <th>Trial</th>
+                  <th className="num">Par</th>
+                </tr>
+              </thead>
+              <tbody>
+                {trials.map((t) => (
+                  <tr key={t.id}>
+                    <td>
+                      <Link className="trial-link" href={`/trials/${encodeURIComponent(t.id)}`}>
+                        {t.title}
+                      </Link>
+                    </td>
+                    <td className="num">{t.par} keys</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+        ))
+      )}
     </>
   );
 }

@@ -61,9 +61,47 @@ are the standing config it depends on.)
 
 ### 1. Supabase
 1. Create a project (free tier). Note the **Project URL**, **anon key**, **service-role key**.
-2. Apply the schema: `supabase db push` (or paste `supabase/migrations/0001_init.sql` into the
-   SQL editor).
+2. Apply the schema — **all four migrations**, in order (see "Running database
+   migrations" below). Quickest path: paste `supabase/all-migrations.sql` into
+   the SQL editor and run it.
 3. Create a Storage bucket `ds-media` (public). Set the CORS JSON above.
+4. Load the trial catalog (the per-trial boards are empty without it):
+   ```bash
+   cd ../DragonSlayer && npm run dev -- leaderboard trials --json > /tmp/trials.json
+   curl -X POST https://YOUR-APP.vercel.app/api/sync-trials \
+     -H "Authorization: Bearer $INGEST_SHARED_SECRET" \
+     -H 'Content-Type: application/json' -d @/tmp/trials.json
+   ```
+
+## Running database migrations
+
+Migrations live in `supabase/migrations/*.sql`, numbered and applied **in
+order**. Everything targets the **`public` schema** (the app's supabase-js
+clients query the default schema). `supabase/seed.sql` is **local-dev only —
+never run it against production** (it inserts fake players and runs).
+
+**Path A — SQL editor (no tooling):** open the project's SQL editor and run
+`supabase/all-migrations.sql` (a generated concatenation of 0001→0004; safe on
+a fresh project). For a project that already has some migrations applied, run
+only the new numbered files, in order.
+
+**Path B — Supabase CLI (repeatable, tracks state):**
+```bash
+supabase login
+supabase link --project-ref <your-project-ref>   # ref is in the dashboard URL
+supabase db push                                  # applies unapplied migrations in order
+```
+
+**Adding a migration:** create the next-numbered file
+(`supabase/migrations/0005_<name>.sql`); verify locally with
+`npm run dev:reset` (drops + replays all migrations + seed); apply to hosted
+with `supabase db push` (or paste the new file in the SQL editor); regenerate
+`all-migrations.sql` by concatenating the files.
+
+**Verify it worked:** Table Editor should show 9 tables (`players`, `guilds`,
+`guild_members`, `guild_invites`, `trials`, `daily_gold_runs`, `trial_runs`,
+`media_assets`, `verification_events`), and the deployed gold board's
+"Could not find the table 'public.daily_gold_runs'" notice disappears.
 
 ### 2. Vercel
 1. Import this repo. Framework preset: **Next.js**.
@@ -75,18 +113,22 @@ are the standing config it depends on.)
 3. Deploy. The gold board renders with ISR (60s); `/moderate` is dynamic.
 
 ### 3. Submissions repo (GitHub-based ingest)
-1. Create a public `ds-submissions` repo with a `receipts/` directory.
-2. Copy `.github/workflows/ingest-receipt.yml` into it.
-3. Add repo secrets: `INGEST_URL` (`https://YOUR-APP.vercel.app/api/ingest`) and
+1. Fork (or recreate) the public [ds-submissions](https://github.com/Soypete/ds-submissions)
+   repo — it carries the two-stage workflows and the receipt validator.
+2. Add repo secrets: `INGEST_URL` (`https://YOUR-APP.vercel.app/api/ingest`) and
    `INGEST_SHARED_SECRET` (same value as Vercel).
-4. Players run `gme leaderboard receipt --out receipts/<handle>-<day>.json`, open a PR.
-   The Action checks the receipt handle == PR author, then POSTs to `/api/ingest`.
+3. Players run `gme leaderboard receipt --out receipts/<handle>-<day>.json` and open a PR.
+   Validation runs on the PR with no secrets (fork-safe: schema, contentHash,
+   filename, handle == PR author); after a maintainer merges, the
+   `ingest-on-merge` workflow POSTs to `/api/ingest` and the run lands pending.
 
-## Self-host (teams who need on-prem)
+## Self-host (your own boards)
 
-Same app, env-swapped: run Postgres + the Next.js app + MinIO (S3-compatible) via
-docker-compose, apply `0001_init.sql`, point the storage env at MinIO. Open-guild creation
-and a "one guild = the whole instance" mode keep it simple. (Compose file is a Phase-3 item.)
+Two supported paths, documented in [`self-host/README.md`](self-host/README.md):
+your own Supabase project (free tier) + the app container, or Supabase's
+official self-hosted stack for fully on-prem. A raw Postgres + MinIO stack
+without Supabase is **not** supported — the app's data/storage/auth layers are
+Supabase-client only; an adapter would be a future enhancement tracked in issues.
 
 ## Cost ceiling & mitigations
 

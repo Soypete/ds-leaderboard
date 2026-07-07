@@ -62,9 +62,10 @@ just selects `status='approved'` and orders by gold. Supabase types an embedded 
 (`players!inner(github_handle)`) as a possible array — `boards.ts` normalizes that with
 `handleOf()`; keep that shape when adding joins.
 
-**Ingest is GitHub-based**, not a direct game→server call: `.github/workflows/ingest-receipt.yml`
-lives here as the canonical reference but is meant to be **copied into the submissions repo**. It
-enforces the author==handle check before POSTing to `/api/ingest` with `INGEST_SHARED_SECRET`.
+**Ingest is GitHub-based**, not a direct game→server call. The workflows live in the
+**ds-submissions repo** (two-stage: `validate-receipt.yml` checks PRs with no secrets so forks
+work; `ingest-on-merge.yml` POSTs to `/api/ingest` with `INGEST_SHARED_SECRET` after a maintainer
+merges). The route re-validates the hash and re-enforces author==handle server-side.
 
 **RLS is the security boundary** (`supabase/migrations/0001_init.sql`): anon reads see only
 approved/global/public-guild rows; there are no anon writes at all — every write goes through the
