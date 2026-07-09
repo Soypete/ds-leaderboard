@@ -33,7 +33,7 @@ jobs:
 
       - run: npm run typecheck
 
-      - run: npm run lint
+      - run: npx eslint .
 
       - run: npm test
 
