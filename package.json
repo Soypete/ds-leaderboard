@@ -18,13 +18,13 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.110.0",
+    "@supabase/supabase-js": "^2.110.2",
     "next": "^16.2.10",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },
   "devDependencies": {
-    "@eslint/eslintrc": "^3.3.5",
+    "@eslint/eslintrc": "^3.3.6",
     "@next/eslint-plugin-next": "^16.2.10",
     "@playwright/test": "^1.61.1",
     "@types/node": "^22.0.0",
